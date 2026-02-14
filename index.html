@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LTL Density & Class Optimizer</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --text:#e8eefc;
+      --muted:#9bb0d6;
+      --line:rgba(255,255,255,.08);
+      --good:#2ecc71;
+      --warn:#f1c40f;
+      --bad:#e74c3c;
+      --pill:#1a2c52;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: radial-gradient(1200px 800px at 20% -20%, rgba(69, 133, 255, .35), transparent 55%),
+                  radial-gradient(900px 700px at 110% 10%, rgba(46, 204, 113, .20), transparent 55%),
+                  radial-gradient(800px 800px at 30% 120%, rgba(241, 196, 15, .15), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      padding: 14px 14px 28px;
+    }
+    header{
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(10px);
+      background: linear-gradient(to bottom, rgba(11,18,32,.92), rgba(11,18,32,.65));
+      border-bottom: 1px solid var(--line);
+      margin: -14px -14px 14px;
+      padding: 14px 14px 12px;
+    }
+    .titleRow{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
+    h1{ font-size: 18px; margin:0; letter-spacing:.2px; }
+    .subtitle{margin-top:4px; color:var(--muted); font-size:12px; line-height:1.35;}
+    .topActions{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+    button{
+      appearance:none;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius: 14px;
+      font-weight:600;
+      font-size:12px;
+      cursor:pointer;
+      box-shadow: 0 6px 18px rgba(0,0,0,.18);
+      transition: transform .05s ease, background .15s ease, border-color .15s ease;
+      touch-action: manipulation;
+    }
+    button:active{ transform: scale(.99) }
+    button.primary{ background: rgba(69,133,255,.18); border-color: rgba(69,133,255,.35) }
+    button.danger{ background: rgba(231,76,60,.15); border-color: rgba(231,76,60,.35) }
+
+    .container{ max-width: 980px; margin:0 auto; display:grid; grid-template-columns: 1fr; gap: 14px; }
+    .grid4{ display:grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 900px){ .grid4{ grid-template-columns: 1fr 1fr; } }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .cardHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 12px 12px 10px;
+      background: linear-gradient(180deg, rgba(26,44,82,.65), rgba(26,44,82,.25));
+      border-bottom: 1px solid var(--line);
+    }
+    .cardHeaderLeft{ display:flex; align-items:center; gap:10px; min-width:0; }
+    .shipTag{
+      width:30px;height:30px; display:grid;place-items:center;
+      border-radius: 12px;
+      background: rgba(255,255,255,.08);
+      border:1px solid var(--line);
+      font-weight:800; font-size:13px;
+      flex: 0 0 auto;
+    }
+    .shipTitle{ display:flex; flex-direction:column; min-width:0; }
+    .shipTitle .name{ font-weight:800; font-size:13px; margin:0; }
+    .shipTitle .hint{
+      font-size:11px; color:var(--muted);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      margin-top:2px;
+    }
+
+    .badges{ display:flex; gap:8px; align-items:center; flex: 0 0 auto; }
+    .pill{
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: var(--pill);
+      border: 1px solid var(--line);
+      font-weight:800;
+      font-size: 12px;
+      line-height:1;
+      display:flex; align-items:center; gap:7px;
+      white-space:nowrap;
+    }
+    .dot{ width:8px;height:8px;border-radius:999px; background: rgba(255,255,255,.35); }
+    .pill.good{ border-color: rgba(46,204,113,.35); background: rgba(46,204,113,.10) }
+    .pill.warn{ border-color: rgba(241,196,15,.35); background: rgba(241,196,15,.10) }
+    .pill.bad{  border-color: rgba(231,76,60,.35); background: rgba(231,76,60,.10) }
+    .pill.good .dot{ background: var(--good) }
+    .pill.warn .dot{ background: var(--warn) }
+    .pill.bad  .dot{ background: var(--bad) }
+
+    .cardBody{ padding: 12px; display:grid; gap: 12px; }
+    .section{
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 10px;
+    }
+    .sectionTitle{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 8px; }
+    .sectionTitle h3{ margin:0; font-size:12px; letter-spacing:.3px; color: rgba(232,238,252,.95); text-transform: uppercase; }
+
+    .inputsGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field{
+      background: rgba(11,21,48,.55);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+    }
+    .label{
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 6px;
+      display:flex; justify-content:space-between; gap:8px; align-items:center;
+    }
+    .label span.small{ font-size:10px; opacity:.9 }
+    input[type="number"]{
+      width:100%;
+      border: none;
+      outline:none;
+      background: transparent;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 800;
+      padding: 0;
+      appearance: textfield;
+    }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+
+    .resultsGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric{
+      border-radius: 14px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      padding: 10px;
+      display:flex; flex-direction:column; gap: 6px;
+    }
+    .metric .k{ font-size:11px; color: var(--muted); }
+    .metric .v{ font-size:16px; font-weight: 900; letter-spacing:.2px; }
+    .metric .v.muted{ color: rgba(232,238,252,.65); font-weight: 800; }
+
+    .optGrid{ display:grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 520px){ .optGrid{ grid-template-columns: 1fr 1fr; } }
+
+    .optCard{
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      padding: 10px;
+      display:flex; flex-direction:column; gap: 10px;
+    }
+    .optHead{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .optHead .tag{
+      font-weight: 900;
+      font-size: 12px;
+      letter-spacing:.2px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.05);
+    }
+    .optHead .tag.good{ border-color: rgba(46,204,113,.35); background: rgba(46,204,113,.10) }
+    .optHead .tag.warn{ border-color: rgba(241,196,15,.35); background: rgba(241,196,15,.10) }
+    .optHead .tag.bad{  border-color: rgba(231,76,60,.35); background: rgba(231,76,60,.10) }
+
+    .row{ display:flex; justify-content:space-between; gap: 10px; align-items:baseline; }
+    .row .k{ color: var(--muted); font-size: 11px; }
+    .row .v{ font-size: 14px; font-weight: 900; }
+
+    .severity{
+      display:flex; justify-content:space-between; gap:10px;
+      padding: 10px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+    }
+    .severity.good{ border-color: rgba(46,204,113,.35); background: rgba(46,204,113,.08) }
+    .severity.warn{ border-color: rgba(241,196,15,.35); background: rgba(241,196,15,.08) }
+    .severity.bad{  border-color: rgba(231,76,60,.35); background: rgba(231,76,60,.08) }
+
+    .cardFooter{ display:flex; gap:8px; justify-content:flex-end; padding: 0 12px 12px; }
+
+    .toast{
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+      background: rgba(15, 26, 46, .95);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events:none;
+      transition: opacity .25s ease, transform .25s ease;
+    }
+    .toast.show{ opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  </style>
+
+  <!-- App Icon -->
+  <link rel="icon" href="icon-512.png">
+  <link rel="apple-touch-icon" href="icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-512.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+</head>
+<body>
+  <header>
+    <div class="titleRow">
+      <div>
+        <h1>LTL Density & Class Optimizer</h1>
+        <div class="subtitle">Enter dimensions + weight. Shows density, class, and target heights for <b>150</b> and <b>110</b>. Saved on this device.</div>
+      </div>
+      <div class="topActions">
+        
+        <button class="danger" id="clearAll">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid4" id="grid"></div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const D150 = 5.9;
+  const D110 = 8.0;
+
+  const defaultShip = () => ({ L:"", W:"", H:"", WT:"" });
+  const STORAGE_KEY = "ltl_optimizer_v2";
+
+  const grid = document.getElementById("grid");
+  const toastEl = document.getElementById("toast");
+
+  const fmt = {
+    num: (x, d=1) => (Number.isFinite(x) ? x.toFixed(d) : "—"),
+  };
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toastEl.classList.remove("show"), 1400);
+  }
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return [defaultShip(), defaultShip(), defaultShip(), defaultShip()];
+      const data = JSON.parse(raw);
+      if(!Array.isArray(data) || data.length !== 4) throw new Error("bad");
+      return data.map(s => ({ L:s?.L??"", W:s?.W??"", H:s?.H??"", WT:s?.WT??"" }));
+    }catch{
+      return [defaultShip(), defaultShip(), defaultShip(), defaultShip()];
+    }
+  }
+  function saveState(state){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function n(v){
+    const x = Number(v);
+    return Number.isFinite(x) && x > 0 ? x : null;
+  }
+
+  function calc(ship){
+    const L = n(ship.L), W = n(ship.W), H = n(ship.H), WT = n(ship.WT);
+
+    const cubicFt = (L && W && H) ? (L*W*H)/1728 : null;
+    const density = (WT && cubicFt) ? (WT / cubicFt) : null;
+
+    let fClass = null;
+    if(density != null){
+      if(density < D150) fClass = 250;
+      else if(density < D110) fClass = 150;
+      else fClass = 110;
+    }
+
+    const targetH150 = (WT && L && W) ? (WT*1728)/(L*W*D150) : null;
+    const targetH110 = (WT && L && W) ? (WT*1728)/(L*W*D110) : null;
+
+    const drop150 = (H != null && targetH150 != null) ? Math.max(0, H - targetH150) : null;
+    const drop110 = (H != null && targetH110 != null) ? Math.max(0, H - targetH110) : null;
+
+    return { cubicFt, density, fClass, targetH150, targetH110, drop150, drop110 };
+  }
+
+  function classBadge(fClass){
+    if(!fClass) return { label: "Class —", cls: "" };
+    if(fClass === 110) return { label: "Class 110", cls:"good" };
+    if(fClass === 150) return { label: "Class 150", cls:"warn" };
+    return { label: "Class 250", cls:"bad" };
+  }
+
+  function densityBadge(density){
+    if(density == null) return { label:"Density —", cls:"" };
+    if(density >= D110) return { label:`Density ${fmt.num(density,1)}`, cls:"good" };
+    if(density >= D150) return { label:`Density ${fmt.num(density,1)}`, cls:"warn" };
+    return { label:`Density ${fmt.num(density,1)}`, cls:"bad" };
+  }
+
+  function severityForDrop(drop){
+    if(drop == null) return { text:"—", cls:"" };
+    if(drop <= 0.00001) return { text:"No reduction needed", cls:"good" };
+    if(drop > 12) return { text:"Large reduction needed", cls:"bad" };
+    if(drop > 6) return { text:"Moderate reduction needed", cls:"warn" };
+    return { text:"Small reduction needed", cls:"" };
+  }
+
+  function optTag(drop){
+    if(drop == null) return { text:"—", cls:"" };
+    if(drop <= 0.00001) return { text:"Already there", cls:"good" };
+    if(drop > 12) return { text:"Big change", cls:"bad" };
+    if(drop > 6) return { text:"Medium change", cls:"warn" };
+    return { text:"Small change", cls:"" };
+  }
+
+  function setText(id, text){
+    const el = document.getElementById(id);
+    if(el) el.textContent = text;
+  }
+  function setPill(id, label, cls){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.remove("good","warn","bad");
+    if(cls) el.classList.add(cls);
+    const t = el.querySelector("[data-pill-text]");
+    if(t) t.textContent = label;
+  }
+  function setTag(id, text, cls){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.remove("good","warn","bad");
+    if(cls) el.classList.add(cls);
+    el.textContent = text;
+  }
+  function setSeverity(id, text, cls){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.remove("good","warn","bad");
+    if(cls) el.classList.add(cls);
+    const t = el.querySelector("[data-sev-text]");
+    if(t) t.textContent = text;
+  }
+  function updateShip(i, state){
+    const m = calc(state[i]);
+    const cb = classBadge(m.fClass);
+    const db = densityBadge(m.density);
+
+    const s150 = severityForDrop(m.drop150);
+    const s110 = severityForDrop(m.drop110);
+
+    const tag150 = optTag(m.drop150);
+    const tag110 = optTag(m.drop110);
+
+    setPill(`densityPill-${i}`, db.label, db.cls);
+    setPill(`classPill-${i}`, cb.label, cb.cls);
+
+    setText(`cubic-${i}`, m.cubicFt == null ? "—" : fmt.num(m.cubicFt,2));
+    setText(`density-${i}`, m.density == null ? "—" : fmt.num(m.density,1));
+    setText(`class-${i}`, m.fClass == null ? "—" : String(m.fClass));
+
+    setTag(`tag150a-${i}`, "Class 150", tag150.cls);
+    setTag(`tag150b-${i}`, tag150.text, tag150.cls);
+    setText(`tH150-${i}`, m.targetH150==null ? "—" : fmt.num(m.targetH150,1));
+    setText(`dH150-${i}`, m.drop150==null ? "—" : fmt.num(m.drop150,1));
+    setSeverity(`sev150-${i}`, s150.text, s150.cls);
+
+    setTag(`tag110a-${i}`, "Class 110", tag110.cls);
+    setTag(`tag110b-${i}`, tag110.text, tag110.cls);
+    setText(`tH110-${i}`, m.targetH110==null ? "—" : fmt.num(m.targetH110,1));
+    setText(`dH110-${i}`, m.drop110==null ? "—" : fmt.num(m.drop110,1));
+    setSeverity(`sev110-${i}`, s110.text, s110.cls);
+
+    const hint = document.getElementById(`hint-${i}`);
+    if(hint){
+      hint.textContent = m.fClass ? (m.fClass === 110 ? "Already at 110 density" : "Check target heights below") : "Enter L/W/H/Weight";
+    }
+  }
+
+  function fieldHTML(label, unit, value, idx, key){
+    return `
+      <div class="field">
+        <div class="label">
+          <span>${label}</span>
+          <span class="small">${unit}</span>
+        </div>
+        <input inputmode="decimal" type="number" step="any" placeholder="—"
+          value="${escapeAttr(value)}"
+          data-idx="${idx}" data-key="${key}" />
+      </div>
+    `;
+  }
+
+  function metricHTML(k, id, muted=false){
+    return `
+      <div class="metric">
+        <div class="k">${k}</div>
+        <div class="v ${muted ? "muted" : ""}" id="${id}">—</div>
+      </div>
+    `;
+  }
+
+  function escapeAttr(s){ return String(s ?? "").replaceAll('"','&quot;'); }
+
+  let state = loadState();
+
+  function renderAll(){
+    grid.innerHTML = "";
+    state.forEach((ship, i) => {
+      const card = document.createElement("section");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="cardHeader">
+          <div class="cardHeaderLeft">
+            <div class="shipTag">${i+1}</div>
+            <div class="shipTitle">
+              <div class="name">Shipment ${i+1}</div>
+              <div class="hint" id="hint-${i}">Enter L/W/H/Weight</div>
+            </div>
+          </div>
+          <div class="badges">
+            <div class="pill" id="densityPill-${i}"><span class="dot"></span><span data-pill-text>Density —</span></div>
+            <div class="pill" id="classPill-${i}"><span class="dot"></span><span data-pill-text>Class —</span></div>
+          </div>
+        </div>
+
+        <div class="cardBody">
+          <div class="section">
+            <div class="sectionTitle">
+              <h3>Inputs</h3>
+              <button class="danger" data-action="clearOne" data-idx="${i}">Clear</button>
+            </div>
+            <div class="inputsGrid">
+              ${fieldHTML("Length", "in", ship.L, i, "L")}
+              ${fieldHTML("Width", "in", ship.W, i, "W")}
+              ${fieldHTML("Height", "in", ship.H, i, "H")}
+              ${fieldHTML("Weight", "lb", ship.WT, i, "WT")}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="sectionTitle"><h3>Results</h3></div>
+            <div class="resultsGrid">
+              ${metricHTML("Cubic ft", `cubic-${i}`)}
+              ${metricHTML("Density", `density-${i}`)}
+              ${metricHTML("Class", `class-${i}`)}
+              <div class="metric">
+                <div class="k">Limits</div>
+                <div class="v muted">5.9 / 8.0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="sectionTitle"><h3>Optimize by Height</h3></div>
+            <div class="optGrid">
+              <div class="optCard">
+                <div class="optHead">
+                  <div class="tag" id="tag150a-${i}">Class 150</div>
+                  <div class="tag" id="tag150b-${i}">—</div>
+                </div>
+                <div class="row"><div class="k">Target height</div><div class="v"><span id="tH150-${i}">—</span> <span style="color:var(--muted);font-weight:800">in</span></div></div>
+                <div class="row"><div class="k">Reduce height by</div><div class="v"><span id="dH150-${i}">—</span> <span style="color:var(--muted);font-weight:800">in</span></div></div>
+                <div class="severity" id="sev150-${i}">
+                  <div class="k">Indicator</div>
+                  <div class="v" style="font-size:12px" data-sev-text>—</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <div class="optHead">
+                  <div class="tag" id="tag110a-${i}">Class 110</div>
+                  <div class="tag" id="tag110b-${i}">—</div>
+                </div>
+                <div class="row"><div class="k">Target height</div><div class="v"><span id="tH110-${i}">—</span> <span style="color:var(--muted);font-weight:800">in</span></div></div>
+                <div class="row"><div class="k">Reduce height by</div><div class="v"><span id="dH110-${i}">—</span> <span style="color:var(--muted);font-weight:800">in</span></div></div>
+                <div class="severity" id="sev110-${i}">
+                  <div class="k">Indicator</div>
+                  <div class="v" style="font-size:12px" data-sev-text>—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cardFooter">
+          <button data-action="copyToOthers" data-idx="${i}" class="primary">Copy to Others</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+
+    // IMPORTANT FIX:
+    // Don't re-render the whole page on every keypress. That was causing focus loss (only 1 digit).
+    grid.querySelectorAll("input[type=number]").forEach(inp => {
+      inp.addEventListener("input", (e) => {
+        const idx = Number(e.target.dataset.idx);
+        const key = e.target.dataset.key;
+        state[idx][key] = e.target.value;
+        saveState(state);
+        updateShip(idx, state);
+      });
+    });
+
+    grid.querySelectorAll("button[data-action]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const action = btn.dataset.action;
+        const idx = Number(btn.dataset.idx);
+
+        if(action === "clearOne"){
+          state[idx] = defaultShip();
+          saveState(state);
+          renderAll(); // safe to re-render for button actions
+          showToast(`Cleared Shipment ${idx+1}`);
+          return;
+        }
+
+        if(action === "copyToOthers"){
+          const src = {...state[idx]};
+          state = state.map((s, j) => (j === idx ? s : {...src}));
+          saveState(state);
+          renderAll(); // safe re-render here too
+          showToast(`Copied Shipment ${idx+1} → others`);
+          return;
+        }
+      });
+    });
+
+    // Initialize all computed displays once
+    for(let i=0;i<state.length;i++) updateShip(i, state);
+  }
+
+  document.getElementById("clearAll").addEventListener("click", () => {
+    state = [defaultShip(), defaultShip(), defaultShip(), defaultShip()];
+    saveState(state);
+    renderAll();
+    showToast("Reset");
+  });
+
+  renderAll();
+
+  // Autofocus first field on first run ONLY if everything is blank
+  try{
+    const allBlank = state.every(s => !s.L && !s.W && !s.H && !s.WT);
+    if(allBlank){
+      setTimeout(() => {
+        const first = document.querySelector('input[data-idx="0"][data-key="L"]');
+        if(first) first.focus();
+      }, 150);
+    }
+  }catch{}
+})();
+</script>
+
+<script>
+  // PWA: register service worker (required for offline install on Chrome/Android)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    });
+  }
+</script>
+
+</body>
+</html>
